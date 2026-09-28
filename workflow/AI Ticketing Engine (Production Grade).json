@@ -1,0 +1,436 @@
+{
+  "name": "AI Ticketing Engine (Production Grade)",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "-unsubscribe -noreply -newsletter",
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "id": "89fcd06c-d91c-47d6-95ab-a85300f5f7b4",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1248,
+        896
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const SUPPORT_KEYWORDS = [\n  'zamówien', 'zamowien', 'przesyłk', 'przesylk', 'paczk', 'dostaw',\n  'zwrot', 'reklamacj', 'status', 'faktur', 'płatnoś', 'platnos',\n  'order', 'shipment', 'tracking', 'refund', 'complaint', 'invoice'\n];\n\nfunction getHeader(headers, name) {\n  if (!headers) return undefined;\n  const key = Object.keys(headers).find(k => k.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key]) : undefined;\n}\n\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const json = items[i].json;\n  const headers = json.headers || {};\n\n  const autoSubmitted = getHeader(headers, 'Auto-Submitted');\n  const xAutoreply = getHeader(headers, 'X-Autoreply');\n  const precedence = getHeader(headers, 'Precedence');\n  const listUnsub = getHeader(headers, 'List-Unsubscribe');\n\n  const subject = (json.subject || '').toLowerCase();\n  const rawBody = (json.text || json.textAsHtml || json.html || '').toLowerCase();\n\n  const isAutoReply =\n    (!!autoSubmitted && autoSubmitted.toLowerCase() !== 'no') ||\n    !!xAutoreply ||\n    (!!precedence && ['bulk', 'auto_reply', 'list'].includes(precedence.toLowerCase())) ||\n    /out of office|nieobecnoś|autoresponder|automatyczna odpowiedź/i.test(subject);\n\n  const isNewsletter = !!listUnsub || /unsubscribe|wypisz się|zrezygnuj z subskrypcji/i.test(rawBody);\n  const hasIntent = SUPPORT_KEYWORDS.some(kw => subject.includes(kw) || rawBody.includes(kw));\n\n  if (!isAutoReply && !isNewsletter && hasIntent) {\n    out.push({\n      json: json,\n      pairedItem: { item: i }\n    });\n  }\n}\n\nreturn out;"
+      },
+      "id": "1bce8eda-2897-4330-a3cd-1ba286b450f6",
+      "name": "Traffic Gate & Spam Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map((item, idx) => {\n  let body = item.json.text || \"\";\n  if (!body && (item.json.textAsHtml || item.json.html)) {\n    body = (item.json.textAsHtml || item.json.html).replace(/<[^>]+>/g, ' ');\n  }\n\n  // 1. Anonimizacja adresów e-mail\n  body = body.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/gi, \"[EMAIL_REMOVED]\");\n\n  // 2. Bezpieczna anonimizacja numerów telefonów (wymaga formatu z separatorem lub prefiksu PL)\n  body = body.replace(/(?:\\+48\\s*)?(?:\\d{3}[\\s-]\\d{3}[\\s-]\\d{3}|\\+48\\d{9})/g, \"[PHONE_REMOVED]\");\n\n  return {\n    json: {\n      ...item.json,\n      text: body.trim()\n    },\n    pairedItem: { item: idx }\n  };\n});"
+      },
+      "id": "afdec31a-ef46-4a4c-86cd-315fe4099e3e",
+      "name": "RODO & PII Sanitizer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -784,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Jesteś autonomicznym Agentem Wsparcia Klienta (AI Ticketing Engine) w e-commerce.\n\nInstrukcje procesowe:\n1. Przeanalizuj treść zgłoszenia.\n2. W przypadku pytań o status przesyłki/zamówienia, bezwzględnie wywołaj narzędzie MCP (get_order_status), podając numer zamówienia wyodrębniony z treści.\n3. Ustal priorytet (HIGH, MEDIUM lub LOW).\n4. Ustaw flagę requires_human na true TYLKO w przypadku reklamacji, roszczeń finansowych, wulgaryzmów lub błędów bazy WMS. W standardowych zapytaniach ustaw false.\n5. Wygeneruj profesjonalną, uprzejmą odpowiedź w języku polskim w polu generated_reply."
+        }
+      },
+      "id": "8d28d430-e2ec-473b-a687-8950103116be",
+      "name": "AI Support Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -544,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "6a7af6dc-642c-41b1-9099-3c0b206780c4",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -656,
+        1136
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sseEndpoint": "http://mcp-wms:8000/sse",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "4ed4c142-a7cb-4a3f-bfe4-640791da41b6",
+      "name": "MCP Server (WMS & Tracking)",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        1136
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "MCP ticketing"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"ticket_category\": \"ORDER_STATUS\",\n  \"priority\": \"LOW\",\n  \"requires_human\": false,\n  \"generated_reply\": \"Dziękujemy za kontakt. Twoja paczka jest w drodze i zostanie doręczona jutro.\"\n}",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -320,
+        1168
+      ],
+      "id": "7d8ad9f9-20c1-46bd-ac7e-3fadc2b1658e",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -320,
+        1328
+      ],
+      "id": "26dcbb54-9560-49b7-b7cd-0d3eed822933",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.requires_human }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    },
+                    "id": "a24eea5e-3639-4ad6-ab08-b41faf2f1250"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Human Escalation"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.requires_human }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    },
+                    "id": "efda59e9-aa3b-41a0-a67b-18484adaa87e"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Auto Reply"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "ced85f7b-89ca-4015-9d00-24d8a546b7d4",
+      "name": "Switch (Auto vs Human)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -224,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "text": "=🚨 WYMAGANA INTERWENCJA CZŁOWIEKA!\n\n📌 Kategoria: {{ $json.output?.ticket_category || 'N/A' }}\n⚡ Priorytet: {{ $json.output?.priority || 'HIGH' }}\n👤 Klient: {{ $('Gmail Trigger').item.json.from.value[0].address }}\n✉️ Temat: {{ $('Gmail Trigger').item.json.subject }}\n\n💬 Propozycja odpowiedzi:\n{{ $json.output?.generated_reply || 'Brak wygenerowanej odpowiedzi.' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        96,
+        736
+      ],
+      "id": "f29cd1c0-c27d-4857-bcc8-b2ae25458065",
+      "name": "Telegram Alert (Escalation)",
+      "webhookId": "2b65ea3e-7f69-4762-af47-47a29098461d",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "=Re: {{ $('Gmail Trigger').item.json.subject || 'Status Twojego zamówienia' }}",
+        "emailType": "html",
+        "message": "={{ $json.output.generated_reply }}",
+        "options": {
+          "threadId": "={{ $('Gmail Trigger').item.json.threadId }}",
+          "sendTo": "={{ $('Gmail Trigger').item.json.from.value[0].address }}"
+        }
+      },
+      "id": "b791b4db-4ca4-4830-ac0e-982326acaf17",
+      "name": "Gmail (Create Draft Reply)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        96,
+        896
+      ],
+      "webhookId": "335747fa-81ef-4a33-af0f-93ed1935baa3",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "=⚠️ BŁĄD PARSOWANIA AI / SCHEMA VIOLATION\n\nZgłoszenie nie przeszło walidacji schematu JSON lub flaga decyzyjna nie została ustalona poprawnie.\n\n👤 Klient: {{ $('Gmail Trigger').item.json.from.value[0].address }}\n✉️ Temat: {{ $('Gmail Trigger').item.json.subject }}\n\nRaw LLM Output:\n{{ JSON.stringify($json.output || $json) }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        96,
+        1056
+      ],
+      "id": "7852dac3-fe1b-491b-85d2-61d7afa59183",
+      "name": "Telegram Fallback Alert",
+      "webhookId": "e3795ae0-c4d0-46de-a1c3-78690fb402f3",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Traffic Gate & Spam Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traffic Gate & Spam Filter": {
+      "main": [
+        [
+          {
+            "node": "RODO & PII Sanitizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RODO & PII Sanitizer": {
+      "main": [
+        [
+          {
+            "node": "AI Support Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Support Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Server (WMS & Tracking)": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Support Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Support Agent": {
+      "main": [
+        [
+          {
+            "node": "Switch (Auto vs Human)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch (Auto vs Human)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Alert (Escalation)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gmail (Create Draft Reply)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram Fallback Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Support Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Structured Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": ""
+  },
+  "nodeGroups": [],
+  "id": "",
+  "tags": []
+}

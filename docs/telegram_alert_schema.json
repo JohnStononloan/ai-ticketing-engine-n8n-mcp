@@ -1,0 +1,49 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "AITicketingOutputSchema",
+    "description": "Struktura danych generowana przez Structured Output Parser dla węzła decyzyjnego Switch",
+    "type": "object",
+    "properties": {
+        "ticket_category": {
+            "type": "string",
+            "description": "Kategoria zgłoszenia wyznaczona przez model",
+            "enum": [
+                "ORDER_STATUS",
+                "COMPLAINT",
+                "REFUND_REQUEST",
+                "GENERAL_INQUIRY",
+                "TECHNICAL_ISSUE"
+            ]
+        },
+        "priority": {
+            "type": "string",
+            "description": "Priorytet eskalacji zgłoszenia",
+            "enum": [
+                "LOW",
+                "MEDIUM",
+                "HIGH"
+            ]
+        },
+        "requires_human": {
+            "type": "boolean",
+            "description": "Flaga determinująca routing do Telegrama (true) lub Gmail Draft (false)"
+        },
+        "generated_reply": {
+            "type": "string",
+            "description": "Zaproponowana odpowiedź dla klienta z uwzględnieniem danych z WMS lub prośba o weryfikację"
+        }
+    },
+    "required": [
+        "ticket_category",
+        "priority",
+        "requires_human",
+        "generated_reply"
+    ],
+    "additionalProperties": false,
+    "example": {
+        "ticket_category": "COMPLAINT",
+        "priority": "HIGH",
+        "requires_human": true,
+        "generated_reply": "Dzień dobry, Panie Janie Kowalski, dziękujemy za kontakt i przepraszamy za sytuację związaną z zamówieniem ZAM/10928. W tej chwili sprawdzamy status przesyłki i postaramy się szybko wyjaśnić sprawę. Zgodnie z Pana dyspozycją, przekazujemy zgłoszenie dotyczące żądania anulacji i zwrotu środków do natychmiastowej weryfikacji przez nasz zespół reklamacji."
+    }
+}
