@@ -80,15 +80,21 @@ An autonomous, multi-stage customer support pipeline designed to process incomin
 
 The complete production-grade pipeline handling payload normalization, agentic tool invocation, and branching logic:
 
+![n8n Execution Pipeline](./assets/n8n_workflow_canvas.png)
+
 ### 2. Autonomous WMS Ingestion & Draft Reply (Low Risk)
 
 For standard order tracking queries, the agent queries the FastMCP WMS server, resolves shipping information, and stages an accurate email draft:
+
+![Gmail Draft Reply](./assets/gmail_draft_reply.png)
 
 > *Figure 1: Automated customer draft staged via Gmail API incorporating live carrier ETA.*
 
 ### 3. Human Escalation Alert (High Risk / Dispute)
 
 For chargeback threats, complaints, or refund demands, the engine escalates immediately without autonomous customer contact:
+
+![Telegram Escalation Alert](./assets/telegram_escalation_alert.png)
 
 > *Figure 2: Real-time dispute brief dispatched to support team with AI-suggested co-pilot response.*
 
@@ -133,7 +139,7 @@ For chargeback threats, complaints, or refund demands, the engine escalates imme
 Clone the repository and instantiate the environment variables:
 
 ```bash
-git clone [https://github.com/JohnStononloan/enterprise-ai-ticketing-engine.git](https://github.com/JohnStononloan/enterprise-ai-ticketing-engine.git)
+git clone https://github.com/JohnStononloan/enterprise-ai-ticketing-engine.git
 cd enterprise-ai-ticketing-engine
 cp .env.example .env
 
