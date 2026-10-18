@@ -185,6 +185,3 @@ The services will be available at:
 * **Non-Destructive Operations:** Low-risk customer responses are created as **drafts**, requiring human validation prior to sending.
 * **Fail-Closed Escalation:** High-friction tickets default strictly to human support via Telegram rather than risking automated hallucinated commitments.
 
-```
-
-```
